@@ -35,7 +35,7 @@ guard arguments.count == 2 else {
     exit(1)
 }
 
-let host = arguments[0]
+let hostAndAddress = arguments[0]
 let portStr = arguments[1]
 guard let port = UInt16(portStr) else {
     print("Port must be a UInt16 compatible type")
@@ -44,52 +44,42 @@ guard let port = UInt16(portStr) else {
     exit(1)
 }
 
-let cli = CLI(prefix: "WS Input")
-
-
-let ws = WebSocket(<#T##stream: DuplexStream##DuplexStream#>, mode: <#T##WebSocket.Mode#>)
-let tcp = try TCPInternetSocket(scheme: "stratum+tcp", hostname: host, port: port)
-try tcp.connect()
-
 var shouldPoll = true
 var shouldRead = true
 
-// Polling
-DispatchQueue.global(qos: .background).async {
-    while shouldPoll {
-        // print("::: Reading next line! :::")
-        do {
-            let bytes = try tcp.readUnixLine()
+let cli = CLI(prefix: "WS Input")
 
-            let line = String(bytes: bytes)
-            // print("::: NEXT LINE IS :::")
-            cli.print(color: .blue, string: line)
-        } catch {
-            print("::: Read failed... :::")
-            print(error)
-            sleep(1)
-            exit(1)
-            continue
-        }
-        sleep(1)
+let splitted = hostAndAddress.split(separator: "/").map({ String($0) })
+let host = splitted.first ?? ""
+let address = splitted.count > 1 ? "\(splitted[1])" : ""
+
+let tcp = try TCPInternetSocket(scheme: "ws", hostname: host, port: port)
+let to = "ws://\(host):\(String(port))/\(address)"
+try WebSocket.connect(to: to, using: tcp) { ws in
+
+    // Polling
+    ws.onBinary = { s, bytes in
+        cli.print(color: .blue, string: String(bytes: bytes))
     }
-}
+    ws.onText = { s, string in
+        cli.print(color: .blue, string: string)
+    }
 
-// Writing
-while shouldRead {
-    Thread.sleep(forTimeInterval: 0.1)
-    let line = cli.getLine()
-    // cli.print(color: .red, string: "::: Could not read input :::")
+    DispatchQueue(label: "writing").async {
+        // Writing
+        while shouldRead {
+            Thread.sleep(forTimeInterval: 0.1)
+            let line = cli.getLine()
 
-    // print("::: READ LINE :::")
-    // print(str)
-
-    do {
-        let bytes = try tcp.write(line.makeBytes())
-        cli.print("Bytes written: \(bytes)")
-    } catch {
-        print("::: Write failed :::")
-        print(error)
-        exit(1)
+            do {
+                let bytes = line.makeBytes()
+                try ws.send(bytes)
+                cli.print("Bytes written: \(bytes.count)")
+            } catch {
+                print("::: Write failed :::")
+                print(error)
+                exit(1)
+            }
+        }
     }
 }

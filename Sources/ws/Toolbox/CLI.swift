@@ -38,7 +38,7 @@ class CLI {
 
     func getLine() -> String {
         var string = ""
-        while string.characters.last != "\n" {
+        while string.last != "\n" {
             let lineCapp: Int32 = 1024
             let inLine: UnsafeMutablePointer<Int8> = UnsafeMutablePointer<Int8>.allocate(capacity: 1024)
             // getline(&inLine, &lineCapp, stdin)
