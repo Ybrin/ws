@@ -66,10 +66,12 @@ try WebSocket.connect(to: to, using: tcp) { ws in
     }
 
     // keepalive
-    let p = DispatchSource.makeTimerSource()
-    p.schedule(deadline: .now(), repeating: .seconds(16))
-    p.setEventHandler { try? ws.ping() }
-    p.resume()
+    DispatchQueue(label: "ping").async {
+        while shouldRead || shouldPoll {
+            try? ws.ping()
+            sleep(15)
+        }
+    }
 
     DispatchQueue(label: "writing").async {
         // Writing
